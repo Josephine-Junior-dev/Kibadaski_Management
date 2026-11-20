@@ -271,3 +271,14 @@ for each row execute function public.km_apply_stock_delta();
 drop trigger if exists km_purchases_stock on public.km_purchases;
 create trigger km_purchases_stock after insert or update or delete on public.km_purchases
 for each row execute function public.km_apply_stock_delta();
+
+
+-- Faster menu browsing by business and category.
+create index if not exists km_products_business_category_idx
+  on public.km_products(business_id, category, name);
+
+-- Keep the product type values aligned with the app's Food/Product/Service choices.
+alter table public.km_products drop constraint if exists km_products_item_type_check;
+alter table public.km_products
+  add constraint km_products_item_type_check
+  check (item_type in ('product','service'));
