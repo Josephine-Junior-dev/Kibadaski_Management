@@ -171,9 +171,12 @@ grant select,insert,update,delete on public.km_businesses,public.km_categories,p
 
 -- Stock ledger extension: products can represent meals, ingredients, retail goods or materials.
 alter table public.km_products
+  add column if not exists category text not null default 'Food',
   add column if not exists stock_unit text not null default 'pieces',
   add column if not exists stock_quantity numeric(14,3) not null default 0,
   add column if not exists low_stock_level numeric(14,3) not null default 0;
+
+alter table public.km_sale_items add column if not exists unit text not null default 'Plate';
 
 alter table public.km_purchases
   add column if not exists product_id uuid references public.km_products(id) on delete set null;
