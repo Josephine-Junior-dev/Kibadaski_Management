@@ -1,6 +1,6 @@
-// Kibadaski Management Supabase configuration.
-// Use the project's anon/publishable key only. NEVER use service_role here.
+// Shared Supabase connection used by Garage Operations Pro.
+// This is a publishable key intended for browser use; never put a service_role key here.
 window.APP_CONFIG = {
   SUPABASE_URL: "https://ptluwoeogfkqavhspdjj.supabase.co",
-  SUPABASE_ANON_KEY: "PASTE_YOUR_SUPABASE_ANON_OR_PUBLISHABLE_KEY_HERE"
+  SUPABASE_ANON_KEY: "sb_publishable_wDsWINauH0jX9rezsEwczw_RovrM6Nv"
 };
