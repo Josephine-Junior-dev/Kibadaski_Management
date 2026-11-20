@@ -8,13 +8,14 @@ The Mwende kibanda workflow is our first real-world use case, not the limit of t
 ## Core modules
 - Business setup and profile
 - Dashboard with sales, cash received, credit sales, outstanding customer balances, purchases and expenses
-- Product/service catalogue with editable prices and optional cost/stock tracking
+- Product/service and ingredient catalogue with editable prices, opening stock, units and low-stock alerts
+- Automatic stock increases from linked purchases and decreases from recorded sales, with a stock movement ledger
 - Fast sales entry with multiple line items and cash, partial-payment or customer-credit workflows
-- Named customer accounts, running balances, payment history and statements
+- Named customer accounts, credit terms, payment history, printable customer statements and record edit/delete controls
 - Purchases and supplier records
 - Business expenses
 - Daily, weekly, monthly and custom-date reports
-- Printable reports and customer statements
+- Printable reports, individual sale receipts and customer statements
 - Mobile-first interface
 - Supabase Auth and Row Level Security
 
@@ -40,5 +41,7 @@ The Mwende kibanda workflow is our first real-world use case, not the limit of t
 - Avoid claiming accounting profit unless cost-of-goods data is configured accurately.
 - Make advanced stock, staff permissions, subscriptions and integrations modular additions.
 
-## Status
-Foundation repository. Build and test the onboarding, core sales ledger, customer credit ledger and reports before onboarding paying businesses.
+## Current implementation status
+The first working implementation includes authentication, business setup, product/customer/sale/purchase/expense entry, customer payment entry, basic edit/delete controls, stock tracking hooks, printable receipts and printable customer statements. Run the updated `schema.sql` in Supabase before using the new stock features.
+
+This is still a beta foundation, not a production-ready accounting or inventory system. Before onboarding paying businesses, test stock corrections and deletions, credit balances, report date boundaries, multi-item sales, partial payments, and tenant-isolation policies. Back up existing data before applying schema changes.
