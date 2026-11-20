@@ -166,3 +166,102 @@ end $$;
 
 grant usage on schema public to authenticated;
 grant select,insert,update,delete on public.km_businesses,public.km_categories,public.km_products,public.km_customers,public.km_suppliers,public.km_sales,public.km_sale_items,public.km_customer_payments,public.km_purchases,public.km_expenses to authenticated;
+
+
+
+-- Stock ledger extension: products can represent meals, ingredients, retail goods or materials.
+alter table public.km_products
+  add column if not exists stock_unit text not null default 'pieces',
+  add column if not exists low_stock_level numeric(14,3) not null default 0;
+
+alter table public.km_purchases
+  add column if not exists product_id uuid references public.km_products(id) on delete set null;
+
+create table if not exists public.km_stock_movements (
+ id uuid primary key default gen_random_uuid(),
+ business_id uuid not null references public.km_businesses(id) on delete cascade,
+ product_id uuid not null references public.km_products(id) on delete restrict,
+ movement_type text not null check (movement_type in ('opening','purchase','sale','adjustment','return')),
+ quantity_change numeric(14,3) not null check (quantity_change <> 0),
+ reference_id uuid,
+ notes text,
+ movement_date timestamptz not null default now(),
+ created_at timestamptz not null default now()
+);
+
+create index if not exists km_stock_business_product_idx
+ on public.km_stock_movements(business_id,product_id,movement_date desc);
+
+alter table public.km_stock_movements enable row level security;
+drop policy if exists km_stock_movements_owner on public.km_stock_movements;
+create policy km_stock_movements_owner on public.km_stock_movements for all to authenticated
+using (exists (select 1 from public.km_businesses b where b.id = business_id and b.owner_id = auth.uid()))
+with check (exists (select 1 from public.km_businesses b where b.id = business_id and b.owner_id = auth.uid()));
+
+grant select,insert,update,delete on public.km_stock_movements to authenticated;
+
+-- Keep product stock quantity synchronized with sale and purchase line records.
+create or replace function public.km_apply_stock_delta()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+declare
+  old_delta numeric(14,3) := 0;
+  new_delta numeric(14,3) := 0;
+  pid uuid;
+  bid uuid;
+  ref uuid;
+  note text;
+begin
+  if tg_table_name = 'km_sale_items' then
+    if tg_op <> 'INSERT' and old.product_id is not null then
+      old_delta := old.quantity;
+      pid := old.product_id; bid := old.business_id; ref := old.sale_id;
+    end if;
+    if tg_op <> 'DELETE' and new.product_id is not null then
+      new_delta := -new.quantity;
+      pid := new.product_id; bid := new.business_id; ref := new.sale_id;
+    end if;
+  else
+    if tg_op <> 'INSERT' and old.product_id is not null then
+      old_delta := -old.quantity;
+      pid := old.product_id; bid := old.business_id; ref := old.id;
+    end if;
+    if tg_op <> 'DELETE' and new.product_id is not null then
+      new_delta := new.quantity;
+      pid := new.product_id; bid := new.business_id; ref := new.id;
+    end if;
+  end if;
+
+  if tg_op = 'UPDATE' and old.product_id is not distinct from new.product_id
+     and old.quantity is not distinct from new.quantity then
+    return new;
+  end if;
+
+  if tg_op <> 'INSERT' and old.product_id is not null then
+    update public.km_products set stock_quantity = greatest(0, stock_quantity - old_delta)
+      where id = old.product_id and business_id = old.business_id;
+    insert into public.km_stock_movements(business_id,product_id,movement_type,quantity_change,reference_id,notes)
+      values(old.business_id,old.product_id,'adjustment',-old_delta,
+        case when tg_table_name='km_sale_items' then old.sale_id else old.id end,'Reversal of edited/deleted record');
+  end if;
+
+  if tg_op <> 'DELETE' and new.product_id is not null then
+    update public.km_products set stock_quantity = stock_quantity + new_delta
+      where id = new.product_id and business_id = new.business_id;
+    insert into public.km_stock_movements(business_id,product_id,movement_type,quantity_change,reference_id,notes)
+      values(new.business_id,new.product_id,
+        case when tg_table_name='km_sale_items' then 'sale' else 'purchase' end,
+        new_delta,
+        case when tg_table_name='km_sale_items' then new.sale_id else new.id end,
+        case when tg_table_name='km_sale_items' then 'Stock sold' else 'Stock purchased' end);
+  end if;
+  if tg_op = 'DELETE' then return old; else return new; end if;
+end $$;
+
+drop trigger if exists km_sale_items_stock on public.km_sale_items;
+create trigger km_sale_items_stock after insert or update or delete on public.km_sale_items
+for each row execute function public.km_apply_stock_delta();
+
+drop trigger if exists km_purchases_stock on public.km_purchases;
+create trigger km_purchases_stock after insert or update or delete on public.km_purchases
+for each row execute function public.km_apply_stock_delta();
