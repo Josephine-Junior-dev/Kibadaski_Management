@@ -238,7 +238,7 @@ begin
   end if;
 
   if tg_op <> 'INSERT' and old.product_id is not null then
-    update public.km_products set stock_quantity = greatest(0, stock_quantity - old_delta)
+    update public.km_products set stock_quantity = greatest(0, stock_quantity + old_delta)
       where id = old.product_id and business_id = old.business_id;
     insert into public.km_stock_movements(business_id,product_id,movement_type,quantity_change,reference_id,notes)
       values(old.business_id,old.product_id,'adjustment',-old_delta,
