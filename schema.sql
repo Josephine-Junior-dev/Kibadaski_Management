@@ -172,6 +172,7 @@ grant select,insert,update,delete on public.km_businesses,public.km_categories,p
 -- Stock ledger extension: products can represent meals, ingredients, retail goods or materials.
 alter table public.km_products
   add column if not exists stock_unit text not null default 'pieces',
+  add column if not exists stock_quantity numeric(14,3) not null default 0,
   add column if not exists low_stock_level numeric(14,3) not null default 0;
 
 alter table public.km_purchases
@@ -239,21 +240,23 @@ begin
 
   if tg_op <> 'INSERT' and old.product_id is not null then
     update public.km_products set stock_quantity = greatest(0, stock_quantity + old_delta)
-      where id = old.product_id and business_id = old.business_id;
+      where id = old.product_id and business_id = old.business_id and track_stock = true;
     insert into public.km_stock_movements(business_id,product_id,movement_type,quantity_change,reference_id,notes)
-      values(old.business_id,old.product_id,'adjustment',-old_delta,
-        case when tg_table_name='km_sale_items' then old.sale_id else old.id end,'Reversal of edited/deleted record');
+      select old.business_id,old.product_id,'adjustment',-old_delta,
+        case when tg_table_name='km_sale_items' then old.sale_id else old.id end,'Reversal of edited/deleted record'
+      where exists (select 1 from public.km_products p where p.id=old.product_id and p.business_id=old.business_id and p.track_stock=true);
   end if;
 
   if tg_op <> 'DELETE' and new.product_id is not null then
-    update public.km_products set stock_quantity = stock_quantity + new_delta
-      where id = new.product_id and business_id = new.business_id;
+    update public.km_products set stock_quantity = greatest(0, stock_quantity + new_delta)
+      where id = new.product_id and business_id = new.business_id and track_stock = true;
     insert into public.km_stock_movements(business_id,product_id,movement_type,quantity_change,reference_id,notes)
-      values(new.business_id,new.product_id,
+      select new.business_id,new.product_id,
         case when tg_table_name='km_sale_items' then 'sale' else 'purchase' end,
         new_delta,
         case when tg_table_name='km_sale_items' then new.sale_id else new.id end,
-        case when tg_table_name='km_sale_items' then 'Stock sold' else 'Stock purchased' end);
+        case when tg_table_name='km_sale_items' then 'Stock sold' else 'Stock purchased' end
+      where exists (select 1 from public.km_products p where p.id=new.product_id and p.business_id=new.business_id and p.track_stock=true);
   end if;
   if tg_op = 'DELETE' then return old; else return new; end if;
 end $$;
