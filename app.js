@@ -39,10 +39,11 @@ function printRecord(type,row){printDoc('Kibadaski '+type+' record','<h1>'+esc(b
  document.getElementById('kmReceiptCopy').onclick=()=>copyReceiptText(saleRecordText(x));
  document.getElementById('kmReceiptShare').onclick=()=>shareText('Sale receipt',saleRecordText(x));
 }async function renderActions(e){const b=e.target.closest('[data-action]');if(!b)return;const {action,type,id}=b.dataset;const maps={product:['km_products',items],customer:['km_customers',customers],meal:['km_customer_meals',meals],sale:['km_sales',sales],purchase:['km_purchases',purchases],expense:['km_expenses',expenses],payment:['km_customer_payments',payments]};const [tableName,arr]=maps[type]||[];if(!arr)return;const row=arr.find(x=>x.id===id);if(!row)return;if(action==='delete'){if(!confirm('Permanently delete this '+type+' record? This cannot be undone.'))return;const {error}=await sb.from(tableName).delete().eq('id',id).eq('business_id',biz.id);if(error)return notice(error.message,true);await load();if(type==='customer')document.getElementById('km-customer-profile')?.remove();notice('Record deleted.');return}if(type==='sale'){
- const line=saleLines.find(x=>x.sale_id===id);
- const customerOptions=customers.map((c,i)=>(i+1)+'. '+c.full_name).join('\n');
+ const lines=saleLines.filter(x=>x.sale_id===id);
+ const line=lines[0]||null;
+ const customerOptions=customers.map((c,i)=>(i+1)+'. '+c.full_name).join('\\n');
  const currentCustomer=customers.find(c=>c.id===row.customer_id);
- const customerChoice=prompt('Customer for this sale (enter number, or 0 for Walk-in):\n'+customerOptions+'\nCurrent: '+(currentCustomer?.full_name||'Walk-in'),currentCustomer?String(customers.indexOf(currentCustomer)+1):'0');
+ const customerChoice=prompt('Customer (number, 0 for Walk-in):\\n'+customerOptions+'\\nCurrent: '+(currentCustomer?.full_name||'Walk-in'),currentCustomer?String(customers.indexOf(currentCustomer)+1):'0');
  if(customerChoice===null)return;
  let selectedCustomer=null;
  if(customerChoice.trim()!=='0'&&customerChoice.trim()!==''){
@@ -52,28 +53,34 @@ function printRecord(type,row){printDoc('Kibadaski '+type+' record','<h1>'+esc(b
  }
  const date=prompt('Sale date (YYYY-MM-DD):',String(row.sale_date||row.created_at||'').slice(0,10));
  if(date===null)return;
- if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return notice('Enter the date as YYYY-MM-DD.',true);
- const statuses=['paid','credit','partial'];
+ if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date))return notice('Enter the date as YYYY-MM-DD.',true);
  const status=prompt('Payment status: paid, credit or partial',row.payment_status||'credit');
  if(status===null)return;
- if(!statuses.includes(status.trim().toLowerCase()))return notice('Payment status must be paid, credit or partial.',true);
+ if(!['paid','credit','partial'].includes(status.trim().toLowerCase()))return notice('Payment status must be paid, credit or partial.',true);
+ const productOptions=items.map((p,i)=>(i+1)+'. '+p.name).join('\\n');
+ const currentProduct=line?items.find(p=>p.id===line.product_id):null;
+ const itemPrompt=prompt('Item (enter product number, or leave blank for no item):\\n'+productOptions+'\\nCurrent: '+(currentProduct?.name||line?.item_name||'No item'),currentProduct?String(items.indexOf(currentProduct)+1):'');
+ if(itemPrompt===null)return;
  let total=Number(row.total_amount)||0;
- if(line){
-  const productOptions=items.map((p,i)=>(i+1)+'. '+p.name).join('\n');
-  const currentProduct=items.find(p=>p.id===line.product_id);
-  const productChoice=prompt('Item (enter number):\n'+productOptions+'\nCurrent: '+(currentProduct?.name||line.item_name||'Item'),currentProduct?String(items.indexOf(currentProduct)+1):'');
-  if(productChoice===null)return;
-  const pn=Number(productChoice);
-  if(!Number.isInteger(pn)||pn<1||pn>items.length)return notice('Choose a valid item number.',true);
+ let lineUpdateError=null;
+ if(itemPrompt.trim()===''){
+  if(line){
+   const del=await sb.from('km_sale_items').delete().eq('id',line.id).eq('business_id',biz.id);
+   if(del.error)return notice(del.error.message,true);
+  }
+ }else{
+  const pn=Number(itemPrompt);
+  if(!Number.isInteger(pn)||pn<1||pn>items.length)return notice('Choose a valid item number, or leave blank.',true);
   const selectedProduct=items[pn-1];
-  const qty=Number(prompt('Quantity:',line.quantity||1));
+  const qty=Number(prompt('Quantity:',line?.quantity||1));
   if(!Number.isFinite(qty)||qty<=0)return notice('Enter a valid quantity.',true);
-  const price=Number(prompt('Unit price:',line.unit_price||selectedProduct.selling_price||0));
+  const price=Number(prompt('Unit price:',line?.unit_price??selectedProduct.selling_price??0));
   if(!Number.isFinite(price)||price<0)return notice('Enter a valid unit price.',true);
-  const unit=prompt('Unit (Plate, Piece, Cup, Kg, etc.):',line.unit||'Plate');
+  const unit=prompt('Unit (Plate, Piece, Cup, Kg, etc.):',line?.unit||'Plate');
   if(unit===null)return;
   total=qty*price;
-  const lr=await sb.from('km_sale_items').update({product_id:selectedProduct.id,item_name:selectedProduct.name,quantity:qty,unit:unit.trim()||'Plate',unit_price:price,line_total:total}).eq('id',line.id).eq('business_id',biz.id);
+  const lineData={product_id:selectedProduct.id,item_name:selectedProduct.name,quantity:qty,unit:unit.trim()||'Plate',unit_price:price,unit_cost:selectedProduct.unit_cost||0,line_total:total};
+  const lr=line?await sb.from('km_sale_items').update(lineData).eq('id',line.id).eq('business_id',biz.id):await sb.from('km_sale_items').insert({...lineData,business_id:biz.id,sale_id:id});
   if(lr.error)return notice(lr.error.message,true);
  }
  const when=new Date(date+'T12:00:00').toISOString();
