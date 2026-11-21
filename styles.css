@@ -31,3 +31,5 @@
 
 #purchaseForm label:has(#purchaseUnit),
 #expenseForm label:has(#expenseCategory){display:none!important}
+
+.record-tools{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}.row-actions{display:inline-flex;gap:5px;flex-wrap:wrap;margin-left:6px}.row-actions .mini{margin:2px 0}
