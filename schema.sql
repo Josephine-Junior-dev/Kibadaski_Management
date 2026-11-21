@@ -282,3 +282,22 @@ alter table public.km_products drop constraint if exists km_products_item_type_c
 alter table public.km_products
   add constraint km_products_item_type_check
   check (item_type in ('product','service'));
+
+ 
+-- Daily customer meals ledger
+create table if not exists public.km_customer_meals (
+ id uuid primary key default gen_random_uuid(),
+ business_id uuid not null references public.km_businesses(id) on delete cascade,
+ customer_id uuid not null references public.km_customers(id) on delete cascade,
+ meal_date date not null default current_date,
+ amount numeric(14,2) not null check (amount > 0),
+ created_at timestamptz not null default now()
+);
+create index if not exists km_customer_meals_customer_date_idx
+ on public.km_customer_meals(business_id,customer_id,meal_date desc);
+alter table public.km_customer_meals enable row level security;
+drop policy if exists km_customer_meals_owner on public.km_customer_meals;
+create policy km_customer_meals_owner on public.km_customer_meals for all to authenticated
+using (exists (select 1 from public.km_businesses b where b.id=business_id and b.owner_id=auth.uid()))
+with check (exists (select 1 from public.km_businesses b where b.id=business_id and b.owner_id=auth.uid()));
+grant select,insert,update,delete on public.km_customer_meals to authenticated;
