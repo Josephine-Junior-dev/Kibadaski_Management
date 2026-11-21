@@ -15,3 +15,19 @@
 .account-wrap{position:relative;margin-left:8px}.avatar-btn{width:40px;height:40px;border:2px solid var(--orange);border-radius:50%;background:var(--green);color:#fff;font-weight:800;font-size:16px}.avatar-menu{position:absolute;right:0;top:48px;z-index:20;width:190px;padding:10px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px #0002}.account-email{font-size:11px;color:var(--muted);padding:8px;overflow-wrap:anywhere;border-bottom:1px solid var(--line);margin-bottom:6px}.avatar-menu button{width:100%;border:0;border-radius:8px;padding:10px;text-align:left;background:#fff0ef;color:var(--red);font-weight:700}.avatar-menu button:hover{background:#ffe1df}
 
 .customer-search-card{border:1px solid var(--line);border-radius:12px;padding:14px;margin:12px 0;background:#fbfdfb}.customer-search-total{font-size:16px;margin:16px 0 10px;color:var(--green-dark)}.customer-search-total strong{font-size:20px}.customer-report-actions{display:flex;gap:8px;flex-wrap:wrap}.customer-report-actions button{padding:9px 13px}
+
+/* Keep everyday kibanda forms short: optional settings stay at their safe defaults. */
+#businessForm label:has(#bizType),
+#businessForm label:has(#currency),
+#businessForm label:has(#bizEmail),
+#businessForm label:has(#bizAddress),
+#productForm label:has(#itemCategory),
+#customerForm label:has(#customerPhone),
+#customerForm label:has(#creditTerms),
+#saleForm label:has(#saleDate),
+#saleForm label:has(#saleUnit),
+#saleForm label:has(#saleTotal),
+#purchaseForm label:has(#purchaseProduct),
+#purchaseForm label:has(#purchaseQty),
+#purchaseForm label:has(#purchaseUnit),
+#expenseForm label:has(#expenseCategory){display:none!important}
