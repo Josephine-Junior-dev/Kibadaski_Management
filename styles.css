@@ -28,6 +28,6 @@
 #saleForm label:has(#saleUnit),
 #saleForm label:has(#saleTotal),
 #purchaseForm label:has(#purchaseProduct),
-#purchaseForm label:has(#purchaseQty),
+
 #purchaseForm label:has(#purchaseUnit),
 #expenseForm label:has(#expenseCategory){display:none!important}
