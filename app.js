@@ -42,9 +42,16 @@ function printRecord(type,row){printDoc('Kibadaski '+type+' record','<h1>'+esc(b
  const rows=[];
  meals.filter(m=>m.customer_id===c.id).forEach(m=>rows.push({date:m.meal_date||'',item:m.item_name||m.description||'Meal entry (name not saved)',qty:m.quantity||'—',amount:Number(m.amount)||0,kind:'Meal entry',status:'Credit'}));
  sales.filter(x=>x.customer_id===c.id).forEach(x=>{
-  const lines=saleLines.filter(i=>i.sale_id===x.id);
-  if(lines.length)lines.forEach(i=>rows.push({date:(x.sale_date||x.created_at||'').slice(0,10),item:i.item_name||items.find(p=>p.id===i.product_id)?.name||'Item name missing',qty:(i.quantity||'—')+' '+(i.unit||''),amount:Number(i.line_total)>0?Number(i.line_total):(Number(i.quantity)||0)*saleItemPrice(i),kind:'Sale',status:x.payment_status||'unknown',saleId:x.id}));
-  else rows.push({date:(x.sale_date||x.created_at||'').slice(0,10),item:'Sale details not saved',qty:'—',amount:Number(x.total_amount)||0,kind:'Sale',status:x.payment_status||'unknown',saleId:x.id});
+  const lines=saleLines.filter(i=>i.sale_id===x.id),headerTotal=Number(x.total_amount)||0;
+  if(lines.length){
+   const calculated=lines.map(i=>({item:i,amount:Number(i.line_total)>0?Number(i.line_total):(Number(i.quantity)||0)*saleItemPrice(i)}));
+   const calculatedTotal=calculated.reduce((n,z)=>n+z.amount,0);
+   calculated.forEach(z=>{
+    const i=z.item;
+    const fallback=calculatedTotal>0?z.amount*headerTotal/calculatedTotal:headerTotal*(Number(i.quantity)||1)/(lines.reduce((n,v)=>n+(Number(v.quantity)||1),0));
+    rows.push({date:(x.sale_date||x.created_at||'').slice(0,10),item:i.item_name||items.find(p=>p.id===i.product_id)?.name||'Item name missing',qty:(i.quantity||'—')+' '+(i.unit||''),amount:z.amount>0?z.amount:fallback,kind:'Sale',status:x.payment_status||'unknown',saleId:x.id});
+   });
+  }else rows.push({date:(x.sale_date||x.created_at||'').slice(0,10),item:'Sale details not saved',qty:'—',amount:headerTotal,kind:'Sale',status:x.payment_status||'unknown',saleId:x.id});
  });
  return rows.sort((x,y)=>y.date.localeCompare(x.date));
 }
@@ -80,7 +87,7 @@ function customerProfileHtml(c){
  return '<div class="customer-profile-head"><div><p class="eyebrow">CUSTOMER ACCOUNT</p><h2>'+esc(c.full_name)+'</h2><p>'+esc(c.phone||'No phone number')+'</p></div><button type="button" class="mini" data-action="customer-close">Close ✕</button></div>'+
  '<div class="customer-profile-details"><div><span>Phone number</span><b>'+esc(c.phone||'—')+'</b></div><div><span>Date registered</span><b>'+esc(c.created_at?new Date(c.created_at).toLocaleDateString():'—')+'</b></div><div><span>Credit arrangement</span><b>'+esc(c.credit_terms||'Flexible')+'</b></div></div>'+
  '<div class="customer-profile-actions"><button class="btn" data-action="profile-meal" data-id="'+c.id+'">＋ Record new meal</button><button class="btn secondary" data-action="profile-payment" data-id="'+c.id+'">Receive payment</button><button class="mini" data-action="edit" data-type="customer" data-id="'+c.id+'">Edit customer</button><button class="mini danger" data-action="delete" data-type="customer" data-id="'+c.id+'">Delete customer</button><button class="mini" data-action="customer-print" data-id="'+c.id+'">Print full statement</button><button class="mini" data-action="customer-share" data-id="'+c.id+'">Share statement</button></div>'+
- '<div class="customer-profile-stats"><article><span>Total food consumed</span><b>'+money(r.total)+'</b></article><article><span>Total credit</span><b>'+money(r.rows.filter(x=>x.status!=='paid').reduce((n,x)=>n+x.amount,0))+'</b></article><article><span>Total paid</span><b>'+money(r.paid)+'</b></article><article><span>Outstanding balance</span><b>'+money(r.balance)+'</b></article></div>'+
+ '<div class="customer-profile-stats"><article><span>Total food consumed</span><b>'+money(r.total)+'</b></article><article><span>Total credit</span><b>'+money(r.creditTotal)+'</b></article><article><span>Total paid</span><b>'+money(r.paid)+'</b></article><article><span>Outstanding balance</span><b>'+money(r.balance)+'</b></article></div>'+
  '<h3>Food history</h3>'+mealsRows+'<h3>Payment history</h3>'+paymentRows;
 }
 function openCustomerProfile(c){
