@@ -24,7 +24,7 @@
 #productForm label:has(#itemCategory),
 #customerForm label:has(#customerPhone),
 #customerForm label:has(#creditTerms),
-#saleForm label:has(#saleDate),
+
 #saleForm label:has(#saleUnit),
 #saleForm label:has(#saleTotal),
 #purchaseForm label:has(#purchaseProduct),
