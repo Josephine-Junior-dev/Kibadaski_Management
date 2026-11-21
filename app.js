@@ -101,7 +101,7 @@ function printRecord(type,row){printDoc('Kibadaski '+type+' record','<h1>'+esc(b
    });
   }else rows.push({date:(x.sale_date||x.created_at||'').slice(0,10),item:'Sale details not saved',qty:'—',amount:headerTotal,kind:'Sale',status:x.payment_status||'unknown',saleId:x.id});
  });
- return rows.sort((x,y)=>y.date.localeCompare(x.date));
+ return rows.sort((x,y)=>x.date.localeCompare(y.date));
 }
 function customerReport(c){
  const rows=customerRows(c),mealTotal=meals.filter(m=>m.customer_id===c.id).reduce((n,m)=>n+(Number(m.amount)||0),0);
