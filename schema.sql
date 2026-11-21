@@ -301,3 +301,9 @@ create policy km_customer_meals_owner on public.km_customer_meals for all to aut
 using (exists (select 1 from public.km_businesses b where b.id=business_id and b.owner_id=auth.uid()))
 with check (exists (select 1 from public.km_businesses b where b.id=business_id and b.owner_id=auth.uid()));
 grant select,insert,update,delete on public.km_customer_meals to authenticated;
+
+-- Store the actual food and quantity for each daily customer meal.
+alter table public.km_customer_meals
+  add column if not exists item_name text,
+  add column if not exists quantity numeric(14,3),
+  add column if not exists unit text not null default 'Plate';
