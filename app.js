@@ -54,10 +54,11 @@ function printRecord(type,row){printDoc('Kibadaski '+type+' record','<h1>'+esc(b
  const date=prompt('Sale date (YYYY-MM-DD):',String(row.sale_date||row.created_at||'').slice(0,10));
  if(date===null)return;
  if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date))return notice('Enter the date as YYYY-MM-DD.',true);
- const status=prompt('Payment status: paid, credit or partial',row.payment_status||'credit');
- if(status===null)return;
- const normalizedStatus=status.trim().toLowerCase();
- if(!['paid','credit','partial'].includes(normalizedStatus))return notice('Payment status must be paid, credit or partial.',true);
+ const currentMode=String(row.payment_status||'credit').toLowerCase()==='paid'?'1':String(row.payment_status||'').toLowerCase()==='partial'?'3':'2';
+ const mode=prompt('EDIT PAYMENT MODE\\n1 = Cash (Paid)\\n2 = Customer credit\\n3 = Part payment',currentMode);
+ if(mode===null)return;
+ const normalizedStatus=mode.trim()==='1'?'paid':mode.trim()==='2'?'credit':mode.trim()==='3'?'partial':'';
+ if(!normalizedStatus)return notice('Choose 1 for Cash, 2 for Customer credit, or 3 for Part payment.',true);
  if(normalizedStatus!=='paid'&&!selectedCustomer)return notice('Select a customer for a credit or partial-payment sale.',true);
  const productOptions=items.map((p,i)=>(i+1)+'. '+p.name).join('\\n');
  const currentProduct=line?items.find(p=>p.id===line.product_id):null;
