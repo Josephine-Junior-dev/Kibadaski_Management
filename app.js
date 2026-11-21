@@ -43,7 +43,7 @@ function printRecord(type,row){printDoc('Kibadaski '+type+' record','<h1>'+esc(b
  const line=lines[0]||null;
  const currentCustomer=customers.find(c=>c.id===row.customer_id);
  const customerOptions=customers.map((c,i)=>(i+1)+'. '+c.full_name).join('\\n');
- const customerChoice=prompt('Customer (number, 0 for Walk-in):\\n'+customerOptions+'\\nCurrent: '+(currentCustomer?.full_name||'Walk-in'),currentCustomer?String(customers.indexOf(currentCustomer)+1):'0');
+ const customerChoice=prompt('Customer number (0 = Walk-in):\\n'+customerOptions,currentCustomer?String(customers.indexOf(currentCustomer)+1):'0');
  if(customerChoice===null)return;
  let selectedCustomer=null;
  if(customerChoice.trim()!=='0'&&customerChoice.trim()!==''){
@@ -61,51 +61,64 @@ function printRecord(type,row){printDoc('Kibadaski '+type+' record','<h1>'+esc(b
  if(normalizedStatus!=='paid'&&!selectedCustomer)return notice('Select a customer for a credit or partial-payment sale.',true);
  const productOptions=items.map((p,i)=>(i+1)+'. '+p.name).join('\\n');
  const currentProduct=line?items.find(p=>p.id===line.product_id):null;
- const itemPrompt=prompt('Item (product number, or leave blank if no item):\\n'+productOptions+'\\nCurrent: '+(currentProduct?.name||line?.item_name||'No item'),currentProduct?String(items.indexOf(currentProduct)+1):'');
+ const itemPrompt=prompt('Item number (leave blank for no item):\\n'+productOptions,currentProduct?String(items.indexOf(currentProduct)+1):'');
  if(itemPrompt===null)return;
- let total=Number(row.total_amount)||0, selectedProduct=null, qty=0, price=0, unit='';
- if(itemPrompt.trim()!==''){
+ let selectedProduct=null,qty=0,price=0,unit='',total=Number(row.total_amount)||0;
+ if(itemPrompt.trim()){
   const pn=Number(itemPrompt);
   if(!Number.isInteger(pn)||pn<1||pn>items.length)return notice('Choose a valid item number, or leave blank.',true);
   selectedProduct=items[pn-1];
   qty=Number(prompt('Quantity:',line?.quantity||1));
-  if(!Number.isFinite(qty)||qty<=0)return notice('Enter a valid quantity.',true);
+  if(!Number.isFinite(qty)||qty<=0)return notice('Enter a quantity greater than zero.',true);
   price=Number(prompt('Unit price:',line?.unit_price??selectedProduct.selling_price??0));
   if(!Number.isFinite(price)||price<0)return notice('Enter a valid unit price.',true);
-  const enteredUnit=prompt('Unit (Plate, Piece, Cup, Kg, etc.):',line?.unit||'Plate');
-  if(enteredUnit===null)return;
-  unit=enteredUnit.trim()||'Plate';
+  const u=prompt('Unit (Plate, Piece, Cup, Kg, etc.):',line?.unit||'Plate');
+  if(u===null)return;
+  unit=u.trim()||'Plate';
   total=qty*price;
+ }else{
+  const enteredAmount=prompt('Sale amount (KES):',String(row.total_amount??0));
+  if(enteredAmount===null)return;
+  total=Number(enteredAmount);
+  if(!Number.isFinite(total)||total<0)return notice('Enter a valid sale amount.',true);
  }
- const when=new Date(date+'T12:00:00').toISOString();
- const header=await sb.from(tableName).update({
+ const headerPayload={
   customer_id:selectedCustomer?.id||null,
   customer_name:selectedCustomer?.full_name||'Walk-in',
-  sale_date:when,
+  sale_date:date,
   payment_status:normalizedStatus,
   total_amount:total,
   subtotal:total
- }).eq('id',id).eq('business_id',biz.id).select('id').maybeSingle();
- if(header.error)return notice('Sale was not updated: '+header.error.message,true);
- if(!header.data)return notice('Sale was not updated. The record was not found or permission was denied.',true);
- if(!selectedProduct){
-  if(lines.length){
-   const del=await sb.from('km_sale_items').delete().eq('sale_id',id).eq('business_id',biz.id);
-   if(del.error)return notice('Sale details could not be cleared: '+del.error.message,true);
-  }
- }else{
-  const lineData={product_id:selectedProduct.id,item_name:selectedProduct.name,quantity:qty,unit,unit_price:price,unit_cost:Number(selectedProduct.unit_cost)||0,line_total:total};
+ };
+ if(selectedProduct){
+  const linePayload={product_id:selectedProduct.id,item_name:selectedProduct.name,quantity:qty,unit,unit_price:price,unit_cost:Number(selectedProduct.unit_cost)||0,line_total:total};
   let lineResult;
-  if(line)lineResult=await sb.from('km_sale_items').update(lineData).eq('id',line.id).eq('business_id',biz.id).select('id').maybeSingle();
-  else lineResult=await sb.from('km_sale_items').insert({...lineData,business_id:biz.id,sale_id:id}).select('id').maybeSingle();
-  if(lineResult.error)return notice('Sale amount was saved, but the item details were not: '+lineResult.error.message,true);
-  if(line&&lines.length>1){
-   const extraIds=lines.slice(1).map(x=>x.id);
-   const cleanup=await sb.from('km_sale_items').delete().in('id',extraIds).eq('business_id',biz.id);
-   if(cleanup.error)return notice('Sale updated, but extra item lines could not be removed: '+cleanup.error.message,true);
+  if(line){
+   lineResult=await sb.from('km_sale_items').update(linePayload).eq('id',line.id).eq('business_id',biz.id).select('id').maybeSingle();
+   if(lineResult.error)return notice('Could not update the sale item: '+lineResult.error.message,true);
+   if(!lineResult.data)return notice('Sale item was not updated. Please check its access permissions.',true);
+  }else{
+   lineResult=await sb.from('km_sale_items').insert({...linePayload,business_id:biz.id,sale_id:id}).select('id').single();
+   if(lineResult.error)return notice('Could not save the sale item: '+lineResult.error.message,true);
   }
+  if(lines.length>1){
+   const cleanup=await sb.from('km_sale_items').delete().in('id',lines.slice(1).map(x=>x.id)).eq('business_id',biz.id);
+   if(cleanup.error)return notice('The main item was updated, but extra item lines remain: '+cleanup.error.message,true);
+  }
+ }else if(lines.length){
+  const del=await sb.from('km_sale_items').delete().eq('sale_id',id).eq('business_id',biz.id);
+  if(del.error)return notice('Could not remove the old item details: '+del.error.message,true);
  }
-}else if(type==='product'){const name=prompt('Product / ingredient name:',row.name);if(name===null)return;const category=prompt('Category (Food, Fruits, Vegetables, Drinks, Snacks, Other):',row.category||'Food');if(category===null)return;const price=Number(prompt('Selling price:',row.selling_price));if(!Number.isFinite(price)||price<0)return notice('Invalid price.',true);const stock=Number(prompt('Current stock quantity:',row.stock_quantity));if(!Number.isFinite(stock)||stock<0)return notice('Invalid stock quantity.',true);const {error}=await sb.from(tableName).update({name:name.trim(),category,selling_price:price,stock_quantity:stock}).eq('id',id).eq('business_id',biz.id);if(error)return notice(error.message,true);if(row.track_stock&&stock!==Number(row.stock_quantity)){const delta=stock-Number(row.stock_quantity);const m=await sb.from('km_stock_movements').insert({business_id:biz.id,product_id:id,movement_type:'adjustment',quantity_change:delta,notes:'Manual stock correction'});if(m.error)return notice(m.error.message,true)}}else if(type==='meal'){const amount=Number(prompt('Amount eaten:',row.amount));if(!Number.isFinite(amount)||amount<=0)return notice('Enter a valid amount.',true);const date=prompt('Meal date (YYYY-MM-DD):',row.meal_date);if(date===null)return;const {error}=await sb.from(tableName).update({amount,meal_date:date}).eq('id',id).eq('business_id',biz.id);if(error)return notice(error.message,true)}else if(type==='customer'){const name=prompt('Customer name:',row.full_name);if(name===null)return;const phone=prompt('Phone:',row.phone||'');if(phone===null)return;const terms=prompt('Credit arrangement (daily, weekly, monthly, flexible):',row.credit_terms||'flexible');if(terms===null)return;const allowed=['daily','weekly','monthly','flexible'];if(!allowed.includes(terms.trim().toLowerCase()))return notice('Choose daily, weekly, monthly or flexible.',true);const {error}=await sb.from(tableName).update({full_name:name.trim(),phone,credit_terms:terms.trim().toLowerCase()}).eq('id',id).eq('business_id',biz.id);if(error)return notice(error.message,true)}else if(type==='purchase'){const item=prompt('Purchase item:',row.item_name);if(item===null)return;const date=prompt('Purchase date (YYYY-MM-DD):',String(row.purchase_date||'').slice(0,10));if(date===null)return;const qty=Number(prompt('Quantity:',row.quantity||1));if(!Number.isFinite(qty)||qty<=0)return notice('Enter a valid quantity.',true);const price=Number(prompt('Unit price:',row.unit_cost||0));if(!Number.isFinite(price)||price<0)return notice('Enter a valid unit price.',true);const {error}=await sb.from(tableName).update({item_name:item,purchase_date:new Date(date+'T12:00:00').toISOString(),quantity:qty,unit_cost:price,total_cost:qty*price}).eq('id',id).eq('business_id',biz.id);if(error)return notice(error.message,true)}else if(type==='expense'){const desc=prompt('Expense description:',row.description);if(desc===null)return;const amount=Number(prompt('Amount:',row.amount));if(!Number.isFinite(amount)||amount<=0)return notice('Invalid amount.',true);const {error}=await sb.from(tableName).update({description:desc,amount}).eq('id',id).eq('business_id',biz.id);if(error)return notice(error.message,true)}else if(type==='payment'){const amount=Number(prompt('Payment amount:',row.amount));if(!Number.isFinite(amount)||amount<=0)return notice('Invalid amount.',true);const {error}=await sb.from(tableName).update({amount}).eq('id',id).eq('business_id',biz.id);if(error)return notice(error.message,true)}await load();if(type==='customer'&&document.getElementById('km-customer-profile')){document.getElementById('km-customer-profile').remove();const updated=customers.find(x=>x.id===id);if(updated)openCustomerProfile(updated)}notice('Record updated.')}function customerRows(c){
+ const saved=await sb.from('km_sales').update(headerPayload).eq('id',id).eq('business_id',biz.id).select('id,total_amount,sale_date,customer_name,payment_status').maybeSingle();
+ if(saved.error)return notice('Could not update the sale record: '+saved.error.message,true);
+ if(!saved.data)return notice('No sale record was updated. Check that you still have permission to edit this sale.',true);
+ await load();
+ const check=sales.find(x=>x.id===id);
+ if(!check||Number(check.total_amount)!==Number(total)||String(check.sale_date||'').slice(0,10)!==date||String(check.customer_name||'')!==String(headerPayload.customer_name)||String(check.payment_status||'')!==normalizedStatus){
+  return notice('Supabase did not return the changed sale values after saving. Please try again and report this message.',true);
+ }
+ notice('Sale updated successfully. The sales list and customer account have been refreshed.');
+{const name=prompt('Product / ingredient name:',row.name);if(name===null)return;const category=prompt('Category (Food, Fruits, Vegetables, Drinks, Snacks, Other):',row.category||'Food');if(category===null)return;const price=Number(prompt('Selling price:',row.selling_price));if(!Number.isFinite(price)||price<0)return notice('Invalid price.',true);const stock=Number(prompt('Current stock quantity:',row.stock_quantity));if(!Number.isFinite(stock)||stock<0)return notice('Invalid stock quantity.',true);const {error}=await sb.from(tableName).update({name:name.trim(),category,selling_price:price,stock_quantity:stock}).eq('id',id).eq('business_id',biz.id);if(error)return notice(error.message,true);if(row.track_stock&&stock!==Number(row.stock_quantity)){const delta=stock-Number(row.stock_quantity);const m=await sb.from('km_stock_movements').insert({business_id:biz.id,product_id:id,movement_type:'adjustment',quantity_change:delta,notes:'Manual stock correction'});if(m.error)return notice(m.error.message,true)}}else if(type==='meal'){const amount=Number(prompt('Amount eaten:',row.amount));if(!Number.isFinite(amount)||amount<=0)return notice('Enter a valid amount.',true);const date=prompt('Meal date (YYYY-MM-DD):',row.meal_date);if(date===null)return;const {error}=await sb.from(tableName).update({amount,meal_date:date}).eq('id',id).eq('business_id',biz.id);if(error)return notice(error.message,true)}else if(type==='customer'){const name=prompt('Customer name:',row.full_name);if(name===null)return;const phone=prompt('Phone:',row.phone||'');if(phone===null)return;const terms=prompt('Credit arrangement (daily, weekly, monthly, flexible):',row.credit_terms||'flexible');if(terms===null)return;const allowed=['daily','weekly','monthly','flexible'];if(!allowed.includes(terms.trim().toLowerCase()))return notice('Choose daily, weekly, monthly or flexible.',true);const {error}=await sb.from(tableName).update({full_name:name.trim(),phone,credit_terms:terms.trim().toLowerCase()}).eq('id',id).eq('business_id',biz.id);if(error)return notice(error.message,true)}else if(type==='purchase'){const item=prompt('Purchase item:',row.item_name);if(item===null)return;const date=prompt('Purchase date (YYYY-MM-DD):',String(row.purchase_date||'').slice(0,10));if(date===null)return;const qty=Number(prompt('Quantity:',row.quantity||1));if(!Number.isFinite(qty)||qty<=0)return notice('Enter a valid quantity.',true);const price=Number(prompt('Unit price:',row.unit_cost||0));if(!Number.isFinite(price)||price<0)return notice('Enter a valid unit price.',true);const {error}=await sb.from(tableName).update({item_name:item,purchase_date:new Date(date+'T12:00:00').toISOString(),quantity:qty,unit_cost:price,total_cost:qty*price}).eq('id',id).eq('business_id',biz.id);if(error)return notice(error.message,true)}else if(type==='expense'){const desc=prompt('Expense description:',row.description);if(desc===null)return;const amount=Number(prompt('Amount:',row.amount));if(!Number.isFinite(amount)||amount<=0)return notice('Invalid amount.',true);const {error}=await sb.from(tableName).update({description:desc,amount}).eq('id',id).eq('business_id',biz.id);if(error)return notice(error.message,true)}else if(type==='payment'){const amount=Number(prompt('Payment amount:',row.amount));if(!Number.isFinite(amount)||amount<=0)return notice('Invalid amount.',true);const {error}=await sb.from(tableName).update({amount}).eq('id',id).eq('business_id',biz.id);if(error)return notice(error.message,true)}await load();if(type==='customer'&&document.getElementById('km-customer-profile')){document.getElementById('km-customer-profile').remove();const updated=customers.find(x=>x.id===id);if(updated)openCustomerProfile(updated)}notice('Record updated.')}function customerRows(c){
  const rows=[];
  meals.filter(m=>m.customer_id===c.id).forEach(m=>rows.push({date:m.meal_date||'',item:m.item_name||m.description||'Meal entry (name not saved)',qty:m.quantity||'—',amount:Number(m.amount)||0,kind:'Meal entry',status:'Credit'}));
  sales.filter(x=>x.customer_id===c.id).forEach(x=>{
