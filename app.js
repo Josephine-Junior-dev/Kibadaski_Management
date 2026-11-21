@@ -52,10 +52,11 @@ function customerReport(c){
  const rows=customerRows(c),mealTotal=meals.filter(m=>m.customer_id===c.id).reduce((n,m)=>n+(Number(m.amount)||0),0);
  const customerSales=sales.filter(x=>x.customer_id===c.id);
  const salesTotal=customerSales.reduce((n,x)=>n+(Number(x.total_amount)||0),0);
- const creditSales=customerSales.filter(x=>x.payment_status!=='paid').reduce((n,x)=>n+(Number(x.total_amount)||0),0);
+ const creditSales=customerSales.filter(x=>String(x.payment_status||'credit').toLowerCase()!=='paid').reduce((n,x)=>n+(Number(x.total_amount)||0),0);
  const paid=payments.filter(p=>p.customer_id===c.id).reduce((n,p)=>n+(Number(p.amount)||0),0);
  const creditMeals=mealTotal;
- return {rows,total:mealTotal+salesTotal,salesTotal,mealTotal,paid,balance:Math.max(0,creditSales+creditMeals-paid),customerSales};
+ const creditTotal=creditSales+creditMeals;
+ return {rows,total:mealTotal+salesTotal,salesTotal,mealTotal,creditSales,creditTotal,paid,balance:Math.max(0,creditTotal-paid),customerSales};
 }
 function customerReportHtml(c){
  const r=customerReport(c),payRows=payments.filter(p=>p.customer_id===c.id).sort((a,b)=>(b.payment_date||'').localeCompare(a.payment_date||''));
